@@ -378,7 +378,7 @@ export class Peer implements P2P.IPeer {
     public async getPeerBlocks(afterBlockHeight: number): Promise<any> {
         const endpoint = "/peer/blocks";
         const response = await httpie.get(`${this.url}${endpoint}`, {
-            params: { lastBlockHeight: afterBlockHeight },
+            query: { lastBlockHeight: afterBlockHeight },
             headers: this.headers,
             timeout: 10000,
         });
