@@ -36,6 +36,7 @@
         "@arkecosystem/core-container": "^2.2.0",
         "@arkecosystem/core-interfaces": "^2.2.0",
         "@arkecosystem/core-p2p": "^2.2.0",
+        "@arkecosystem/core-utils": "^2.2.0",
         "@arkecosystem/crypto": "^2.2.0",
         "axios": "^0.18.0",
         "delay": "^4.1.0",

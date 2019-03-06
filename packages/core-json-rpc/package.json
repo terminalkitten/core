@@ -35,6 +35,7 @@
         "@arkecosystem/core-container": "^2.2.0",
         "@arkecosystem/core-http-utils": "^2.2.0",
         "@arkecosystem/core-interfaces": "^2.2.0",
+        "@arkecosystem/core-utils": "^2.2.0",
         "@arkecosystem/crypto": "^2.2.0",
         "@keyv/sqlite": "^2.0.0",
         "axios": "^0.18.0",

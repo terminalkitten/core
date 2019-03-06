@@ -39,6 +39,7 @@
         "@arkecosystem/core-http-utils": "^2.2.0",
         "@arkecosystem/core-interfaces": "^2.2.0",
         "@arkecosystem/core-transaction-pool": "^2.2.0",
+        "@arkecosystem/core-utils": "^2.2.0",
         "@arkecosystem/crypto": "^2.2.0",
         "ajv": "^6.9.1",
         "axios": "^0.18.0",
