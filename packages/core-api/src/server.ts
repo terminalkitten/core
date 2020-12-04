@@ -1,7 +1,8 @@
 import { app } from "@arkecosystem/core-container";
-import { createSecureServer, createServer, mountServer, plugins } from "@arkecosystem/core-http-utils";
+import { createServer, mountServer, plugins } from "@arkecosystem/core-http-utils";
 import { Logger } from "@arkecosystem/core-interfaces";
-import Hapi from "hapi";
+import Hapi from "@hapi/hapi";
+import { get } from "dottie";
 
 export class Server {
     private logger = app.resolvePlugin<Logger.ILogger>("logger");
@@ -15,16 +16,6 @@ export class Server {
         const options = {
             host: this.config.host,
             port: this.config.port,
-            routes: {
-                cors: {
-                    additionalHeaders: ["api-version"],
-                },
-                validate: {
-                    async failAction(request, h, err) {
-                        throw err;
-                    },
-                },
-            },
         };
 
         if (this.config.enabled) {
@@ -35,7 +26,11 @@ export class Server {
         }
 
         if (this.config.ssl.enabled) {
-            this.https = await createSecureServer(options, null, this.config.ssl);
+            this.https = await createServer({
+                ...options,
+                ...{ host: this.config.ssl.host, port: this.config.ssl.port },
+                ...{ tls: { key: this.config.ssl.key, cert: this.config.ssl.cert } },
+            });
             this.https.app.config = this.config;
 
             this.registerPlugins("HTTPS", this.https);
@@ -71,8 +66,7 @@ export class Server {
     }
 
     private async registerPlugins(name: string, server: Hapi.Server): Promise<void> {
-        // TODO: enable after mainnet migration
-        // await server.register({ plugin: plugins.contentType })
+        await server.register({ plugin: plugins.contentType });
 
         await server.register({
             plugin: plugins.corsHeaders,
@@ -82,7 +76,6 @@ export class Server {
             plugin: plugins.whitelist,
             options: {
                 whitelist: this.config.whitelist,
-                name: "Public API",
             },
         });
 
@@ -90,23 +83,7 @@ export class Server {
             plugin: require("./plugins/set-headers"),
         });
 
-        await server.register({
-            plugin: require("hapi-api-version"),
-            options: this.config.versions,
-        });
-
-        await server.register({
-            plugin: require("./plugins/endpoint-version"),
-            options: { validVersions: this.config.versions.validVersions },
-        });
-
-        await server.register({
-            plugin: require("./plugins/caster"),
-        });
-
-        await server.register({
-            plugin: require("./plugins/validation"),
-        });
+        await server.register(plugins.hapiAjv);
 
         await server.register({
             plugin: require("hapi-rate-limit"),
@@ -114,24 +91,19 @@ export class Server {
         });
 
         await server.register({
-            plugin: require("hapi-pagination"),
+            plugin: require("./plugins/pagination"),
             options: {
-                meta: {
-                    baseUri: "",
-                },
                 query: {
                     limit: {
-                        default: this.config.pagination.limit,
+                        default: get(this.config, "pagination.limit", 100),
                     },
                 },
-                results: {
-                    name: "data",
-                },
-                routes: {
-                    include: this.config.pagination.include,
-                    exclude: ["*"],
-                },
             },
+        });
+
+        await server.register({
+            plugin: require("./handlers"),
+            routes: { prefix: "/api" },
         });
 
         for (const plugin of this.config.plugins) {
@@ -141,6 +113,24 @@ export class Server {
 
             await server.register(plugin);
         }
+
+        server.route({
+            method: "GET",
+            path: "/",
+            handler() {
+                return { data: "Hello World!" };
+            },
+        });
+
+        // @TODO: remove this with the release of 3.0 - adds support for /api and /api/v2
+        server.ext("onRequest", (request: Hapi.Request, h: Hapi.ResponseToolkit) => {
+            if (request.url) {
+                const path: string = request.url.pathname.replace("/v2", "");
+                request.setUrl(request.url.search ? `${path}${request.url.search}` : path);
+            }
+
+            return h.continue;
+        });
 
         await mountServer(`Public ${name.toUpperCase()} API`, server);
     }

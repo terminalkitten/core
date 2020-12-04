@@ -1,23 +1,14 @@
+import { IColumnDescriptor } from "../interfaces";
 import { Model } from "./model";
 
 export class Migration extends Model {
-    /**
-     * The table associated with the model.
-     * @return {String}
-     */
-    public getTable() {
-        return "migrations";
-    }
+    protected columnsDescriptor: IColumnDescriptor[] = [
+        {
+            name: "name",
+        },
+    ];
 
-    /**
-     * The read-only structure with query-formatting columns.
-     * @return {Object}
-     */
-    public getColumnSet() {
-        return this.createColumnSet([
-            {
-                name: "name",
-            },
-        ]);
+    public getTable(): string {
+        return "migrations";
     }
 }

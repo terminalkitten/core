@@ -1,33 +1,37 @@
-import { bignumify } from "@arkecosystem/core-utils";
+import { Database } from "@arkecosystem/core-interfaces";
+import { Utils } from "@arkecosystem/crypto";
+import { IColumnDescriptor } from "../interfaces";
 import { Model } from "./model";
 
 export class Round extends Model {
-    /**
-     * The table associated with the model.
-     * @return {String}
-     */
-    public getTable() {
-        return "rounds";
-    }
+    protected columnsDescriptor: IColumnDescriptor[] = [
+        {
+            name: "public_key",
+            prop: "publicKey",
+            supportedOperators: [Database.SearchOperator.OP_EQ],
+        },
+        {
+            name: "balance",
+            init: col => {
+                return Utils.BigNumber.make(col.value).toFixed();
+            },
+            supportedOperators: [
+                Database.SearchOperator.OP_EQ,
+                Database.SearchOperator.OP_LTE,
+                Database.SearchOperator.OP_GTE,
+            ],
+        },
+        {
+            name: "round",
+            supportedOperators: [
+                Database.SearchOperator.OP_EQ,
+                Database.SearchOperator.OP_LTE,
+                Database.SearchOperator.OP_GTE,
+            ],
+        },
+    ];
 
-    /**
-     * The read-only structure with query-formatting columns.
-     * @return {Object}
-     */
-    public getColumnSet() {
-        return this.createColumnSet([
-            {
-                name: "public_key",
-                prop: "publicKey",
-            },
-            {
-                name: "balance",
-                prop: "voteBalance",
-                init: col => bignumify(col.value).toFixed(),
-            },
-            {
-                name: "round",
-            },
-        ]);
+    public getTable(): string {
+        return "rounds";
     }
 }

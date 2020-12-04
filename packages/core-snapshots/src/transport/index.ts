@@ -6,29 +6,43 @@ import pluralize from "pluralize";
 import zlib from "zlib";
 
 import { app } from "@arkecosystem/core-container";
+import { ApplicationEvents } from "@arkecosystem/core-event-emitter";
 import { EventEmitter, Logger } from "@arkecosystem/core-interfaces";
+import { Managers } from "@arkecosystem/crypto";
 
 import * as utils from "../utils";
-import { getCodec } from "./codecs";
+import { Codec } from "./codec";
 import { canImportRecord, verifyData } from "./verification";
 
 const logger = app.resolvePlugin<Logger.ILogger>("logger");
 const emitter = app.resolvePlugin<EventEmitter.EventEmitter>("event-emitter");
 
+const fixData = (table, data) => {
+    if (table === "blocks" && data.height === 1) {
+        data.id = Managers.configManager.get("genesisBlock").id;
+    }
+
+    // For version=1 transactions the nonce is set automatically at database level (by a trigger
+    // on the transactions table). However, the database library we use is upset if we don't
+    // provide it, so supply a dummy value here.
+    if (table === "transactions" && data.version === 1) {
+        data.nonce = "0";
+    }
+};
+
 export const exportTable = async (table, options) => {
-    const snapFileName = utils.getPath(table, options.meta.folder, options.codec);
-    const codec = getCodec(options.codec);
+    const snapFileName = utils.getFilePath(table, options.meta.folder);
     const gzip = zlib.createGzip();
     await fs.ensureFile(snapFileName);
 
     logger.info(
-        `Starting to export table ${table} to folder ${options.meta.folder}, codec: ${
-            options.codec
+        `Starting to export table ${table} to folder ${
+            options.meta.folder
         }, append:${!!options.blocks}, skipCompression: ${options.meta.skipCompression}`,
     );
     try {
         const snapshotWriteStream = fs.createWriteStream(snapFileName, options.blocks ? { flags: "a" } : {});
-        const encodeStream = msgpack.createEncodeStream(codec ? { codec: codec[table] } : {});
+        const encodeStream = msgpack.createEncodeStream({ codec: Codec[table] });
         const qs = new QueryStream(options.queries[table]);
 
         const data = await options.database.db.stream(qs, s => {
@@ -52,19 +66,16 @@ export const exportTable = async (table, options) => {
         };
     } catch (error) {
         app.forceExit("Error while exporting data via query stream", error);
-        return null;
+        return undefined;
     }
 };
 
 export const importTable = async (table, options) => {
-    const sourceFile = utils.getPath(table, options.meta.folder, options.codec);
-    const codec = getCodec(options.codec);
+    const sourceFile = utils.getFilePath(table, options.meta.folder);
     const gunzip = zlib.createGunzip();
-    const decodeStream = msgpack.createDecodeStream(codec ? { codec: codec[table] } : {});
+    const decodeStream = msgpack.createDecodeStream({ codec: Codec[table] });
     logger.info(
-        `Starting to import table ${table} from ${sourceFile}, codec: ${options.codec}, skipCompression: ${
-            options.meta.skipCompression
-        }`,
+        `Starting to import table ${table} from ${sourceFile}, skipCompression: ${options.meta.skipCompression}`,
     );
 
     const readStream = options.meta.skipCompression
@@ -75,25 +86,30 @@ export const importTable = async (table, options) => {
               .pipe(decodeStream);
 
     let values = [];
-    let prevData = null;
+    let prevData;
     let counter = 0;
     const saveData = async data => {
         if (data && data.length > 0) {
             const insert = options.database.pgp.helpers.insert(data, options.database.getColumnSet(table));
-            emitter.emit("progress", { value: counter, table });
+            emitter.emit(ApplicationEvents.SnapshotProgress, { value: counter, table });
             values = [];
             return options.database.db.none(insert);
         }
     };
 
-    emitter.emit("start", { count: options.meta[table].count });
-    // @ts-ignore
+    emitter.emit(ApplicationEvents.SnapshotStart, { count: options.meta[table].count });
+
+    // tslint:disable-next-line: await-promise
     for await (const record of readStream) {
         counter++;
-        if (!verifyData(table, record, prevData, options.signatureVerification)) {
-            app.forceExit(`Error verifying data. Payload ${JSON.stringify(record, null, 2)}`);
+
+        fixData(table, record);
+
+        if (!verifyData(table, record, prevData, options.verifySignatures)) {
+            app.forceExit(`Error verifying data. Payload ${JSON.stringify(record, undefined, 2)}`);
         }
-        if (canImportRecord(table, record, options.lastBlock)) {
+
+        if (canImportRecord(table, record, options)) {
             values.push(record);
         }
 
@@ -106,14 +122,14 @@ export const importTable = async (table, options) => {
     if (values.length > 0) {
         await saveData(values);
     }
-    emitter.emit("complete");
+
+    emitter.emit(ApplicationEvents.SnapshotComplete);
 };
 
 export const verifyTable = async (table, options) => {
-    const sourceFile = utils.getPath(table, options.meta.folder, options.codec);
-    const codec = getCodec(options.codec);
+    const sourceFile = utils.getFilePath(table, options.meta.folder);
     const gunzip = zlib.createGunzip();
-    const decodeStream = msgpack.createDecodeStream(codec ? { codec: codec[table] } : {});
+    const decodeStream = msgpack.createDecodeStream({ codec: Codec[table] });
     const readStream = options.meta.skipCompression
         ? fs.createReadStream(sourceFile).pipe(decodeStream)
         : fs
@@ -122,17 +138,18 @@ export const verifyTable = async (table, options) => {
               .pipe(decodeStream);
 
     logger.info(`Starting to verify snapshot file ${sourceFile}`);
-    let prevData = null;
+    let prevData;
 
     decodeStream.on("data", data => {
-        if (!verifyData(table, data, prevData, options.signatureVerification)) {
-            app.forceExit(`Error verifying data. Payload ${JSON.stringify(data, null, 2)}`);
+        fixData(table, data);
+        if (!verifyData(table, data, prevData, options.verifySignatures)) {
+            app.forceExit(`Error verifying data. Payload ${JSON.stringify(data, undefined, 2)}`);
         }
         prevData = data;
     });
 
     readStream.on("finish", () => {
-        logger.info(`Snapshot file ${sourceFile} succesfully verified  :+1:`);
+        logger.info(`Snapshot file ${sourceFile} successfully verified`);
     });
 };
 

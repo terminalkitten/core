@@ -1,30 +1,22 @@
+import { Container, Logger } from "@arkecosystem/core-interfaces";
+import Hoek from "@hapi/hoek";
 import { asValue } from "awilix";
-import expandHomeDir from "expand-home-dir";
-import { existsSync } from "fs";
-import Hoek from "hoek";
-import isString from "lodash/isString";
-import { dirname, resolve } from "path";
+import isString from "lodash.isstring";
 import semver from "semver";
 
 export class PluginRegistrar {
-    private container: any;
+    private container: Container.IContainer;
     private plugins: any;
-    private resolvedPlugins: any;
     private options: any;
     private deregister: any;
-    private pluginsConfigPath: any;
+    private failedPlugins: Record<string, Error>;
 
-    /**
-     * Create a new plugin manager instance.
-     * @param  {IContainer} container
-     * @param  {Object} options
-     */
-    constructor(container, options: any = {}) {
+    constructor(container: Container.IContainer, options: Record<string, any> = {}) {
         this.container = container;
-        this.plugins = this.__loadPlugins();
-        this.resolvedPlugins = [];
-        this.options = this.__castOptions(options);
+        this.plugins = container.config.get("plugins");
+        this.options = this.castOptions(options);
         this.deregister = [];
+        this.failedPlugins = {};
     }
 
     /**
@@ -37,6 +29,18 @@ export class PluginRegistrar {
 
             if ((this.options.exit && this.options.exit === name) || this.container.shuttingDown) {
                 break;
+            }
+        }
+
+        const failedPlugins: number = Object.keys(this.failedPlugins).length;
+        if (failedPlugins > 0) {
+            const logger = this.container.resolvePlugin<Logger.ILogger>("logger");
+            if (logger) {
+                logger.warn(`Failed to load ${failedPlugins} optional plugins.`);
+
+                for (const [name, error] of Object.entries(this.failedPlugins)) {
+                    logger.warn(`Plugin '${name}': ${error.message}`);
+                }
             }
         }
     }
@@ -57,16 +61,20 @@ export class PluginRegistrar {
      * @param  {Object} options
      * @return {void}
      */
-    public async register(name, options = {}) {
-        if (!this.__shouldBeRegistered(name)) {
-            return;
-        }
+    private async register(name, options = {}) {
+        try {
+            if (!this.shouldBeRegistered(name)) {
+                return;
+            }
 
-        if (this.plugins[name]) {
-            options = Hoek.applyToDefaults(this.plugins[name], options);
-        }
+            if (this.plugins[name]) {
+                options = Hoek.applyToDefaults(this.plugins[name], options);
+            }
 
-        return this.__registerWithContainer(name, options);
+            return this.registerWithContainer(name, options);
+        } catch (error) {
+            this.failedPlugins[name] = error;
+        }
     }
 
     /**
@@ -75,21 +83,35 @@ export class PluginRegistrar {
      * @param  {Object} options
      * @return {void}
      */
-    public async __registerWithContainer(plugin, options = {}) {
-        const item: any = this.__resolve(plugin);
+    private async registerWithContainer(plugin, options = {}) {
+        let item: any;
+        try {
+            item = this.resolve(plugin);
+        } catch (error) {
+            this.failedPlugins[plugin] = error;
+            return;
+        }
 
         if (!item.plugin.register) {
             return;
         }
 
         if (item.plugin.extends) {
-            await this.__registerWithContainer(item.plugin.extends);
+            await this.registerWithContainer(item.plugin.extends);
+        }
+
+        if (item.plugin.depends && !this.failedPlugins[item.plugin.depends]) {
+            await this.registerWithContainer(item.plugin.depends, this.plugins[item.plugin.depends]);
         }
 
         const name = item.plugin.name || item.plugin.pkg.name;
         const version = item.plugin.version || item.plugin.pkg.version;
         const defaults = item.plugin.defaults || item.plugin.pkg.defaults;
         const alias = item.plugin.alias || item.plugin.pkg.alias;
+
+        if (this.container.has(alias) || this.container.has(name)) {
+            return;
+        }
 
         if (!semver.valid(version)) {
             throw new Error(
@@ -98,21 +120,31 @@ export class PluginRegistrar {
             );
         }
 
-        options = this.__applyToDefaults(name, defaults, options);
+        options = this.applyToDefaults(name, defaults, options);
+        this.container.register(`pkg.${alias || name}.opts`, asValue(options));
 
-        plugin = await item.plugin.register(this.container, options || {});
-        this.container.register(
-            alias || name,
-            asValue({
-                name,
-                version,
-                plugin,
-                options,
-            }),
-        );
+        try {
+            plugin = await item.plugin.register(this.container, options);
+            this.container.register(
+                alias || name,
+                asValue({
+                    name,
+                    version,
+                    plugin,
+                }),
+            );
 
-        if (item.plugin.deregister) {
-            this.deregister.push({ plugin: item.plugin, options });
+            this.plugins[name] = options;
+
+            if (item.plugin.deregister) {
+                this.deregister.push({ plugin: item.plugin, options });
+            }
+        } catch (error) {
+            if (item.plugin.required) {
+                this.container.forceExit(`Failed to load required plugin '${name}'`, error);
+            } else {
+                this.failedPlugins[name] = error;
+            }
         }
     }
 
@@ -124,7 +156,7 @@ export class PluginRegistrar {
      * @param  {Object} options
      * @return {Object}
      */
-    public __applyToDefaults(name, defaults, options) {
+    private applyToDefaults(name, defaults, options) {
         if (defaults) {
             options = Hoek.applyToDefaults(defaults, options);
         }
@@ -133,7 +165,7 @@ export class PluginRegistrar {
             options = Hoek.applyToDefaults(options, this.options.options[name]);
         }
 
-        return this.__castOptions(options);
+        return this.castOptions(options);
     }
 
     /**
@@ -144,16 +176,16 @@ export class PluginRegistrar {
      * @param {Object} options
      * @return {Object} options
      */
-    public __castOptions(options) {
+    private castOptions(options) {
         const blacklist: any = [];
         const regex = new RegExp(/^\d+$/);
 
-        Object.keys(options).forEach(key => {
+        for (const key of Object.keys(options)) {
             const value = options[key];
             if (isString(value) && !blacklist.includes(key) && regex.test(value)) {
                 options[key] = +value;
             }
-        });
+        }
 
         return options;
     }
@@ -163,26 +195,11 @@ export class PluginRegistrar {
      * @param  {(String|Object)} plugin - plugin name or path, or object
      * @return {Object}
      */
-    public __resolve(plugin) {
-        let item: any = {};
+    private resolve(plugin) {
+        let item: any = require(plugin);
 
-        if (isString(plugin)) {
-            if (plugin.startsWith(".")) {
-                plugin = resolve(`${dirname(this.pluginsConfigPath)}/${plugin}`);
-            } else if (!plugin.startsWith("@")) {
-                plugin = resolve(plugin);
-            }
-
-            try {
-                item = require(plugin);
-            } catch (error) {
-                // tslint:disable-next-line:no-console
-                console.error(error);
-            }
-
-            if (!item.plugin) {
-                item = { plugin: item };
-            }
+        if (!item.plugin) {
+            item = { plugin: item };
         }
 
         return item;
@@ -193,7 +210,7 @@ export class PluginRegistrar {
      * @param  {String} name
      * @return {Boolean}
      */
-    public __shouldBeRegistered(name) {
+    private shouldBeRegistered(name) {
         let register = true;
 
         if (this.options.include) {
@@ -205,25 +222,5 @@ export class PluginRegistrar {
         }
 
         return register;
-    }
-
-    /**
-     * Load plugins from any of the available files (plugins.js or plugins.json).
-     * @return {[Object|void]}
-     */
-    public __loadPlugins() {
-        const files = ["plugins.js", "plugins.json"];
-
-        for (const file of files) {
-            const configPath = resolve(expandHomeDir(`${process.env.CORE_PATH_CONFIG}/${file}`));
-
-            if (existsSync(configPath)) {
-                this.pluginsConfigPath = configPath;
-
-                return require(configPath);
-            }
-        }
-
-        throw new Error("An invalid configuration was provided or is inaccessible due to it's security settings.");
     }
 }

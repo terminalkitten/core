@@ -1,33 +1,56 @@
-import sql from "sql";
+import { Database } from "@arkecosystem/core-interfaces";
+import { ColumnSet, IMain } from "pg-promise";
+import sql, { Query } from "sql";
+import { IColumnDescriptor } from "../interfaces";
 
-export abstract class Model {
-    /**
-     * Create a new model instance.
-     * @param {Object} pgp
-     */
-    constructor(public pgp) {}
+export abstract class Model implements Database.IModel {
+    protected columnsDescriptor: IColumnDescriptor[];
+    protected columnSet: ColumnSet;
 
-    /**
-     * Get table name for model.
-     * @return {String}
-     */
+    public constructor(protected readonly pgp: IMain) {}
+
     public abstract getTable(): string;
 
-    /**
-     * Get table column names for model.
-     * @return {String[]}
-     */
-    public abstract getColumnSet(): any;
+    public getColumnSet(): ColumnSet {
+        if (!this.columnSet) {
+            this.columnSet = this.createColumnSet(
+                this.columnsDescriptor.map(col => {
+                    const colDef: IColumnDescriptor = {
+                        name: col.name,
+                    };
 
-    /**
-     * Return the model & table definition.
-     * @return {Object}
-     */
-    public query(): any {
-        const { schema, columns } = this.getColumnSet();
+                    for (const prop of ["prop", "init", "def"]) {
+                        if (col.hasOwnProperty(prop)) {
+                            colDef[prop] = col[prop];
+                        }
+                    }
+
+                    return colDef;
+                }),
+            );
+        }
+
+        return this.columnSet;
+    }
+
+    public getSearchableFields(): Database.ISearchableField[] {
+        return this.columnsDescriptor.map(col => ({
+            fieldName: col.prop || col.name,
+            supportedOperators: col.supportedOperators,
+        }));
+    }
+
+    public getName(): string {
+        return this.constructor.name;
+    }
+
+    public query<T = any>(): Query<T> {
+        const { columns } = this.getColumnSet();
+
         return sql.define({
             name: this.getTable(),
-            schema,
+            schema: "public",
+            // @ts-ignore
             columns: columns.map(column => ({
                 name: column.name,
                 prop: column.prop || column.name,
@@ -35,12 +58,7 @@ export abstract class Model {
         });
     }
 
-    /**
-     * Convert the "camelCase" keys to "snake_case".
-     * @return {ColumnSet}
-     * @param columns
-     */
-    public createColumnSet(columns) {
+    private createColumnSet(columns: IColumnDescriptor[]): ColumnSet {
         return new this.pgp.helpers.ColumnSet(columns, {
             table: {
                 table: this.getTable(),

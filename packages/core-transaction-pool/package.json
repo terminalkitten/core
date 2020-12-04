@@ -1,7 +1,8 @@
 {
     "name": "@arkecosystem/core-transaction-pool",
-    "description": "Transaction Pool Manager for Ark Core",
-    "version": "2.1.2",
+    "version": "2.7.13",
+    "description": "Transaction Pool Manager for ARK Core",
+    "license": "MIT",
     "contributors": [
         "Kristjan Košič <kristjan@ark.io>",
         "Brian Faust <brian@ark.io>",
@@ -9,58 +10,54 @@
         "Vasil Dimov <vd@FreeBSD.org>",
         "Joshua Noack <joshua@ark.io>"
     ],
-    "license": "MIT",
-    "main": "dist/index",
-    "types": "dist/index",
     "files": [
         "dist"
     ],
+    "main": "dist/index",
+    "types": "dist/index",
     "scripts": {
-        "prepublishOnly": "yarn build",
-        "pretest": "bash ../../scripts/pre-test.sh",
-        "compile": "../../node_modules/typescript/bin/tsc",
         "build": "yarn clean && yarn compile",
         "build:watch": "yarn clean && yarn compile -w",
         "clean": "del dist",
-        "docs": "../../node_modules/typedoc/bin/typedoc src --out docs",
-        "lint": "../../node_modules/tslint/bin/tslint -c ../../tslint.json 'src/**/*.ts' '__tests__/**/*.ts' --fix",
-        "test": "cross-env CORE_ENV=test jest --runInBand --forceExit",
-        "test:coverage": "cross-env CORE_ENV=test jest --coverage --coveragePathIgnorePatterns='/(defaults.ts|index.ts)$' --runInBand --forceExit",
-        "test:debug": "cross-env CORE_ENV=test node --inspect-brk ../../node_modules/.bin/jest --runInBand",
-        "test:watch": "cross-env CORE_ENV=test jest --runInBand --watch",
-        "test:watch:all": "cross-env CORE_ENV=test jest --runInBand --watchAll",
-        "updates": "../../node_modules/npm-check-updates/bin/npm-check-updates -a"
+        "compile": "../../node_modules/typescript/bin/tsc",
+        "prepublishOnly": "yarn build",
+        "pretest": "bash ../../scripts/pre-test.sh"
     },
     "dependencies": {
-        "@arkecosystem/core-container": "^2.1.0",
-        "@arkecosystem/core-database": "^2.1.0",
-        "@arkecosystem/crypto": "^2.1.0",
-        "@arkecosystem/core-interfaces": "^2.1.0",
-        "@types/better-sqlite3": "^5.2.0",
-        "@types/fs-extra": "^5.0.4",
+        "@arkecosystem/core-container": "^2.7.13",
+        "@arkecosystem/core-database": "^2.7.13",
+        "@arkecosystem/core-event-emitter": "^2.7.13",
+        "@arkecosystem/core-interfaces": "^2.7.13",
+        "@arkecosystem/core-state": "^2.7.13",
+        "@arkecosystem/core-transactions": "^2.7.13",
+        "@arkecosystem/core-utils": "^2.7.13",
+        "@arkecosystem/crypto": "^2.7.13",
+        "@types/better-sqlite3": "^5.4.0",
+        "@types/fs-extra": "^8.0.0",
         "@types/pluralize": "^0.0.29",
-        "better-sqlite3": "^5.2.1",
-        "bs58check": "^2.1.2",
-        "dayjs-ext": "^2.2.0",
-        "delay": "^4.1.0",
-        "fs-extra": "^7.0.1",
-        "pluralize": "^7.0.0"
+        "better-sqlite3": "^5.4.0",
+        "dayjs": "^1.8.15",
+        "delay": "^4.3.0",
+        "fs-extra": "^8.1.0",
+        "lodash.clonedeep": "^4.5.0",
+        "lodash.differencewith": "^4.5.0",
+        "pluralize": "^8.0.0"
     },
     "devDependencies": {
-        "@arkecosystem/core-test-utils": "^2.1.0",
-        "@arkecosystem/core-utils": "^2.1.0",
-        "@types/bip39": "^2.4.1",
+        "@types/better-sqlite3": "^5.4.0",
+        "@types/bip39": "^2.4.2",
+        "@types/fs-extra": "^8.0.0",
+        "@types/lodash.clonedeep": "^4.5.6",
+        "@types/pluralize": "^0.0.29",
         "@types/random-seed": "^0.3.3",
-        "bip39": "^2.5.0",
+        "bip39": "^3.0.2",
+        "lodash.clonedeep": "^4.5.0",
         "random-seed": "^0.3.0"
-    },
-    "publishConfig": {
-        "access": "public"
     },
     "engines": {
         "node": ">=10.x"
     },
-    "jest": {
-        "preset": "../../jest-preset.json"
+    "publishConfig": {
+        "access": "public"
     }
 }

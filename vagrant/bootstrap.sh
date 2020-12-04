@@ -105,12 +105,12 @@ sudo rm -rf ~/{.npm,.forever,.node*,.cache,.nvm}
 
 if [[ ! -z $DEB ]]; then
     sudo wget --quiet -O - https://deb.nodesource.com/gpgkey/nodesource.gpg.key | sudo apt-key add -
-    (echo "deb https://deb.nodesource.com/node_10.x $(lsb_release -s -c) main" | sudo tee /etc/apt/sources.list.d/nodesource.list)
+    (echo "deb https://deb.nodesource.com/node_12.x $(lsb_release -s -c) main" | sudo tee /etc/apt/sources.list.d/nodesource.list)
     sudo apt-get update
     sudo apt-get install nodejs -y
 elif [[ ! -z $RPM ]]; then
     sudo yum install gcc-c++ make -y
-    curl -sL https://rpm.nodesource.com/setup_10.x | sudo -E bash - > /dev/null 2>&1
+    curl -sL https://rpm.nodesource.com/setup_12.x | sudo -E bash - > /dev/null 2>&1
 fi
 
 success "Installed node.js & npm!"
@@ -199,11 +199,11 @@ fi
 
 success "Installed system updates!"
 
-heading "Installing Ark Core..."
+heading "Installing ARK Core..."
 
 cd /home/vagrant
-git clone https://github.com/ArkEcosystem/core.git ark-core -b develop
+git clone https://github.com/ARKEcosystem/core.git ark-core -b develop
 cd ark-core
 yarn setup
 
-success "Installed Ark Core!"
+success "Installed ARK Core!"

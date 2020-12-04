@@ -1,37 +1,30 @@
 {
     "name": "@arkecosystem/core-error-tracker-sentry",
-    "description": "Sentry error tracker integration for Ark Core.",
-    "version": "2.1.2",
+    "version": "2.7.13",
+    "description": "Sentry error tracker integration for ARK Core.",
+    "license": "MIT",
     "contributors": [
         "Brian Faust <brian@ark.io>"
     ],
-    "license": "MIT",
-    "main": "dist/index.js",
     "files": [
         "dist"
     ],
+    "main": "dist/index",
     "scripts": {
-        "prepublishOnly": "yarn build",
-        "pretest": "yarn lint && yarn build",
-        "compile": "../../node_modules/typescript/bin/tsc",
         "build": "yarn clean && yarn compile",
         "build:watch": "yarn clean && yarn compile -w",
         "clean": "del dist",
-        "docs": "../../node_modules/typedoc/bin/typedoc src --out docs",
-        "lint": "../../node_modules/tslint/bin/tslint -c ../../tslint.json 'src/**/*.ts' '__tests__/**/*.ts' --fix",
-        "updates": "../../node_modules/npm-check-updates/bin/npm-check-updates -a"
+        "compile": "../../node_modules/typescript/bin/tsc",
+        "prepublishOnly": "yarn build"
     },
     "dependencies": {
-        "@sentry/node": "^4.4.2",
-        "@arkecosystem/core-container": "^2.1.0"
-    },
-    "publishConfig": {
-        "access": "public"
+        "@arkecosystem/core-container": "^2.7.13",
+        "@sentry/node": "^5.5.0"
     },
     "engines": {
         "node": ">=10.x"
     },
-    "jest": {
-        "preset": "../../jest-preset.json"
+    "publishConfig": {
+        "access": "public"
     }
 }

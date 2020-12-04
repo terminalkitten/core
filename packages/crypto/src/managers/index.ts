@@ -1,5 +1,2 @@
-import { configManager } from "./config";
-import { feeManager } from "./fee";
-import { NetworkManager } from "./network";
-
-export { configManager, feeManager, NetworkManager };
+export { configManager } from "./config";
+export { NetworkManager } from "./network";

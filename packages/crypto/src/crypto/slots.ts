@@ -1,136 +1,47 @@
-import dayjs from "dayjs-ext";
+import dayjs from "dayjs";
 import { configManager } from "../managers";
 
-class Slots {
-    public height: number;
-    /**
-     * Create a new Slot instance.
-     */
-    constructor() {
-        this.resetHeight();
-    }
-
-    /**
-     * Get the height we are currently at.
-     */
-    public getHeight(): number {
-        return this.height;
-    }
-
-    /**
-     * Set the height we are currently at.
-     */
-    public setHeight(height: number): void {
-        this.height = height;
-    }
-
-    /**
-     * Reset the height to the initial value.
-     */
-    public resetHeight(): void {
-        this.height = 1;
-    }
-
-    /**
-     * Get epoch time relative to beginning epoch time.
-     */
-    public getEpochTime(time?: number): number {
+export class Slots {
+    public static getTime(time?: number): number {
         if (time === undefined) {
             time = dayjs().valueOf();
         }
 
-        const start = this.beginEpochTime().valueOf();
+        const start: number = dayjs(configManager.getMilestone(1).epoch).valueOf();
 
         return Math.floor((time - start) / 1000);
     }
 
-    /**
-     * Get beginning epoch time.
-     */
-    public beginEpochTime(): dayjs.Dayjs {
-        return dayjs(this.getMilestone("epoch")).utc();
-    }
+    public static getTimeInMsUntilNextSlot(): number {
+        const nextSlotTime: number = this.getSlotTime(this.getNextSlot());
+        const now: number = this.getTime();
 
-    /**
-     * Get epoch time relative to beginning epoch time.
-     */
-    public getTime(time?: number): number {
-        return this.getEpochTime(time);
-    }
-
-    /**
-     * Get real time from relative epoch time.
-     */
-    public getRealTime(epochTime?: number): number {
-        if (epochTime === undefined) {
-            epochTime = this.getTime();
-        }
-
-        const start = Math.floor(this.beginEpochTime().valueOf() / 1000) * 1000;
-
-        return start + epochTime * 1000;
-    }
-
-    /**
-     * Time left until next slot.
-     */
-    public getTimeInMsUntilNextSlot(): number {
-        const nextSlotTime = this.getSlotTime(this.getNextSlot());
-        const now = this.getTime();
         return (nextSlotTime - now) * 1000;
     }
 
-    /**
-     * Get the current slot number.
-     */
-    public getSlotNumber(epochTime?: number): number {
-        if (epochTime === undefined) {
-            epochTime = this.getTime();
+    public static getSlotNumber(epoch?: number): number {
+        if (epoch === undefined) {
+            epoch = this.getTime();
         }
 
-        return Math.floor(epochTime / this.getMilestone("blocktime"));
+        return Math.floor(epoch / configManager.getMilestone(1).blocktime);
     }
 
-    /**
-     * Get the current slot time.
-     */
-    public getSlotTime(slot: number): number {
-        return slot * this.getMilestone("blocktime");
+    public static getSlotTime(slot: number): number {
+        return slot * configManager.getMilestone(1).blocktime;
     }
 
-    /**
-     * Get the next slot number.
-     */
-    public getNextSlot(): number {
+    public static getNextSlot(): number {
         return this.getSlotNumber() + 1;
     }
 
-    /**
-     * Get the last slot number.
-     */
-    public getLastSlot(nextSlot: number): number {
-        return nextSlot + this.getMilestone("activeDelegates");
-    }
-
-    /**
-     * Checks if forging is allowed
-     */
-    public isForgingAllowed(epochTime?: number): boolean {
-        if (epochTime === undefined) {
-            epochTime = this.getTime();
+    public static isForgingAllowed(epoch?: number): boolean {
+        if (epoch === undefined) {
+            epoch = this.getTime();
         }
 
-        const blockTime = this.getMilestone("blocktime");
+        const blockTime: number = configManager.getMilestone(1).blocktime;
 
-        return epochTime % blockTime < blockTime / 2;
-    }
-
-    /**
-     * Get constant from height 1.
-     */
-    private getMilestone(key: string): any {
-        return configManager.getMilestone(this.height)[key];
+        return epoch % blockTime < blockTime / 2;
     }
 }
-
-export const slots = new Slots();

@@ -1,44 +1,40 @@
 {
     "name": "@arkecosystem/core-utils",
-    "description": "Utilities for Ark Core",
-    "version": "2.1.2",
+    "version": "2.7.13",
+    "description": "Utilities for ARK Core",
+    "license": "MIT",
     "contributors": [
         "Brian Faust <brian@ark.io>"
     ],
-    "license": "MIT",
-    "main": "dist/index.js",
     "files": [
         "dist"
     ],
+    "main": "dist/index",
     "scripts": {
-        "prepublishOnly": "yarn build",
-        "pretest": "yarn lint && yarn build",
-        "compile": "../../node_modules/typescript/bin/tsc",
         "build": "yarn clean && yarn compile",
         "build:watch": "yarn clean && yarn compile -w",
         "clean": "del dist",
-        "docs": "../../node_modules/typedoc/bin/typedoc src --out docs",
-        "lint": "../../node_modules/tslint/bin/tslint -c ../../tslint.json 'src/**/*.ts' '__tests__/**/*.ts' --fix",
-        "test": "cross-env CORE_ENV=test jest --runInBand --forceExit",
-        "test:coverage": "cross-env CORE_ENV=test jest --coverage --coveragePathIgnorePatterns='/(defaults.ts|index.ts)$' --runInBand --forceExit",
-        "test:debug": "cross-env CORE_ENV=test node --inspect-brk ../../node_modules/.bin/jest --runInBand",
-        "test:watch": "cross-env CORE_ENV=test jest --runInBand --watch",
-        "test:watch:all": "cross-env CORE_ENV=test jest --runInBand --watchAll",
-        "updates": "../../node_modules/npm-check-updates/bin/npm-check-updates -a"
+        "compile": "../../node_modules/typescript/bin/tsc",
+        "prepublishOnly": "yarn build"
     },
     "dependencies": {
-        "@arkecosystem/core-container": "^2.1.0",
-        "@arkecosystem/crypto": "^2.1.0",
+        "@arkecosystem/core-container": "^2.7.13",
+        "@arkecosystem/core-interfaces": "^2.7.13",
+        "@arkecosystem/crypto": "^2.7.13",
         "cli-table3": "^0.5.1",
-        "dayjs-ext": "^2.2.0"
+        "dayjs": "^1.8.15",
+        "fast-json-parse": "^1.0.3",
+        "got": "^9.6.0",
+        "immutable": "^4.0.0-rc.12",
+        "nanomatch": "^1.2.13"
     },
-    "publishConfig": {
-        "access": "public"
+    "devDependencies": {
+        "@types/got": "^9.6.1"
     },
     "engines": {
         "node": ">=10.x"
     },
-    "jest": {
-        "preset": "../../jest-preset.json"
+    "publishConfig": {
+        "access": "public"
     }
 }

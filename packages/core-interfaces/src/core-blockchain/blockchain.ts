@@ -1,33 +1,34 @@
-import { models } from "@arkecosystem/crypto";
-import { IMonitor } from "../core-p2p";
-import { ITransactionPool } from "../core-transaction-pool";
-import { IStateStorage } from "./state-storage";
+import { Interfaces } from "@arkecosystem/crypto";
+import { IDatabaseService } from "../core-database";
+import { IPeerService } from "../core-p2p";
+import { IStateStore } from "../core-state";
+import { IConnection } from "../core-transaction-pool";
 
 export interface IBlockchain {
     /**
      * Get the state of the blockchain.
-     * @return {IStateStorage}
+     * @return {IStateStore}
      */
-    readonly state: IStateStorage;
+    readonly state: IStateStore;
 
     /**
      * Get the network (p2p) interface.
      */
-    readonly p2p: IMonitor;
+    readonly p2p: IPeerService;
 
     /**
      * Get the transaction handler.
-     * @return {ITransactionPool}
+     * @return {IConnection}
      */
-    readonly transactionPool: ITransactionPool;
+    readonly transactionPool: IConnection;
 
     /**
      * Get the database connection.
      * @return {ConnectionInterface}
      */
-    readonly database: any;
+    readonly database: IDatabaseService;
 
-    dispatch(event: any): any;
+    dispatch(event: string): void;
 
     /**
      * Start the blockchain and wait for it to be ready.
@@ -37,26 +38,11 @@ export interface IBlockchain {
 
     stop(): Promise<void>;
 
-    checkNetwork(): void;
-
     /**
      * Update network status.
      * @return {void}
      */
     updateNetworkStatus(): Promise<any>;
-
-    /**
-     * Rebuild N blocks in the blockchain.
-     * @param  {Number} nblocks
-     * @return {void}
-     */
-    rebuild(nblocks?: number): void;
-
-    /**
-     * Reset the state of the blockchain.
-     * @return {void}
-     */
-    resetState(): void;
 
     /**
      * Clear and stop the queue.
@@ -65,24 +51,9 @@ export interface IBlockchain {
     clearAndStopQueue(): void;
 
     /**
-     * Hand the given transactions to the transaction handler.
-     * @param  {Array}   transactions
-     * @return {void}
-     */
-    postTransactions(transactions: models.Transaction[]): Promise<void>;
-
-    /**
      * Push a block to the process queue.
-     * @param  {Block} block
-     * @return {void}
      */
-    handleIncomingBlock(block: models.Block): void;
-
-    /**
-     * Rollback all blocks up to the previous round.
-     * @return {void}
-     */
-    rollbackCurrentRound(): Promise<void>;
+    handleIncomingBlock(block: Interfaces.IBlockData, fromForger?: boolean): void;
 
     /**
      * Remove N number of blocks.
@@ -100,22 +71,13 @@ export interface IBlockchain {
     removeTopBlocks(count: any): Promise<void>;
 
     /**
-     * Hande a block during a rebuild.
+     * Process the given blocks.
      * NOTE: We should be sure this is fail safe (ie callback() is being called only ONCE)
-     * @param  {Block} block
-     * @param  {Function} callback
-     * @return {Object}
-     */
-    rebuildBlock(block: models.Block, callback: any): Promise<any>;
-
-    /**
-     * Process the given block.
-     * NOTE: We should be sure this is fail safe (ie callback() is being called only ONCE)
-     * @param  {Block} block
+     * @param  {Block[]} block
      * @param  {Function} callback
      * @return {(Function|void)}
      */
-    processBlock(block: models.Block, callback: any): Promise<any>;
+    processBlocks(blocks: Interfaces.IBlockData[], callback: any): Promise<any>;
 
     /**
      * Called by forger to wake up and sync with the network.
@@ -131,41 +93,20 @@ export interface IBlockchain {
      * @param {Block} block
      * @returns {void}
      */
-    forkBlock(block: models.Block): void;
-
-    /**
-     * Get unconfirmed transactions for the specified block size.
-     * @param  {Number}  blockSize
-     * @param  {Boolean} forForging
-     * @return {Object}
-     */
-    getUnconfirmedTransactions(
-        blockSize: any,
-    ): {
-        transactions: any[];
-        poolSize: any;
-        count: number;
-    };
+    forkBlock(block: Interfaces.IBlock): void;
 
     /**
      * Determine if the blockchain is synced.
      * @param  {Block} [block=getLastBlock()]  block
      * @return {Boolean}
      */
-    isSynced(block?: models.Block): boolean;
-
-    /**
-     * Determine if the blockchain is synced after a rebuild.
-     * @param  {Block}  block
-     * @return {Boolean}
-     */
-    isRebuildSynced(block?: models.Block): boolean;
+    isSynced(block?: Interfaces.IBlockData): boolean;
 
     /**
      * Get the last block of the blockchain.
      * @return {Object}
      */
-    getLastBlock(): models.Block;
+    getLastBlock(): Interfaces.IBlock;
 
     /**
      * Get the last height of the blockchain.
@@ -177,7 +118,7 @@ export interface IBlockchain {
      * Get the last downloaded block of the blockchain.
      * @return {Object}
      */
-    getLastDownloadedBlock(): { data: models.IBlockData };
+    getLastDownloadedBlock(): Interfaces.IBlockData;
 
     /**
      * Get the block ping.
@@ -189,17 +130,15 @@ export interface IBlockchain {
      * Ping a block.
      * @return {Object}
      */
-    pingBlock(incomingBlock: models.IBlockData): any;
+    pingBlock(incomingBlock: Interfaces.IBlockData): any;
 
     /**
      * Push ping block.
      * @return {Object}
      */
-    pushPingBlock(block: models.IBlockData): void;
+    pushPingBlock(block: Interfaces.IBlockData, fromForger?: boolean): void;
 
-    /**
-     * Get the list of events that are available.
-     * @return {Array}
-     */
-    getEvents(): string[];
+    replay(targetHeight?: number): Promise<void>;
+
+    checkMissingBlocks(): Promise<void>;
 }

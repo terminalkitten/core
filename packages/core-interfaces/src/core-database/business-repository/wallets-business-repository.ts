@@ -1,20 +1,21 @@
-import { models } from "@arkecosystem/crypto";
+import { IWallet } from "../../core-state";
 import { IParameters } from "./parameters";
 
+export interface IRowsPaginated<T> {
+    rows: ReadonlyArray<T>;
+    count: number;
+}
+
+export enum SearchScope {
+    Wallets,
+    Delegates,
+    Locks,
+    Entities,
+}
+
 export interface IWalletsBusinessRepository {
-
-    all(): models.Wallet[];
-
-    findAll(params?: IParameters): { count: number, rows: models.Wallet[] }
-
-    findAllByVote(publicKey: string, params?: IParameters): { count: number, rows: models.Wallet[] };
-
-    findById(id: string): models.Wallet;
-
-    count(): number;
-
-    top(params?: IParameters): { count: number, rows: models.Wallet[] }
-
-    search<T extends IParameters>(params: T): { count: number, rows: models.Wallet[] }
-
+    search<T>(scope: SearchScope, params: IParameters): IRowsPaginated<T>;
+    findById(searchScope: SearchScope, id: string): IWallet;
+    count(searchScope: SearchScope): number;
+    top(searchScope: SearchScope, params?: IParameters): IRowsPaginated<IWallet>;
 }

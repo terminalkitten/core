@@ -1,49 +1,13 @@
 export interface ILogger {
-    /**
-     * Make the logger instance.
-     * @return {Object}
-     */
     make(): ILogger;
+    getLogger<T = any>(): T;
 
-    /**
-     * Log an error message.
-     * @param  {String} message
-     * @return {void}
-     */
-    error(message: string): void;
+    log(level: string, message: any): boolean;
+    error(message: any): boolean;
+    warn(message: any): boolean;
+    info(message: any): boolean;
+    debug(message: any): boolean;
+    verbose(message: any): boolean;
 
-    /**
-     * Log a warning message.
-     * @param  {String} message
-     * @return {void}
-     */
-    warn(message: string): void;
-
-    /**
-     * Log an info message.
-     * @param  {String} message
-     * @return {void}
-     */
-    info(message: string): void;
-
-    /**
-     * Log a debug message.
-     * @param  {String} message
-     * @return {void}
-     */
-    debug(message: string): void;
-
-    /**
-     * Log a verbose message.
-     * @param  {String} message
-     * @return {void}
-     */
-    verbose(message: string): void;
-
-    /**
-     * Suppress console output.
-     * @param  {Boolean}
-     * @return {void}
-     */
-    suppressConsoleOutput(suppress: boolean): void;
+    suppressConsoleOutput(suppress?: boolean): void;
 }

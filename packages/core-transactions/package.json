@@ -1,0 +1,35 @@
+{
+    "name": "@arkecosystem/core-transactions",
+    "version": "2.7.13",
+    "description": "Transaction Services for ARK Core",
+    "license": "MIT",
+    "contributors": [
+        "Joshua Noack <joshua@ark.io>"
+    ],
+    "files": [
+        "dist"
+    ],
+    "main": "dist/index",
+    "types": "dist/index",
+    "scripts": {
+        "build": "yarn clean && yarn compile",
+        "build:watch": "yarn clean && yarn compile -w",
+        "clean": "del dist",
+        "compile": "../../node_modules/typescript/bin/tsc",
+        "prepublishOnly": "yarn build"
+    },
+    "dependencies": {
+        "@arkecosystem/core-container": "^2.7.13",
+        "@arkecosystem/core-event-emitter": "^2.7.13",
+        "@arkecosystem/core-interfaces": "^2.7.13",
+        "@arkecosystem/core-utils": "^2.7.13",
+        "@arkecosystem/crypto": "^2.7.13",
+        "bs58check": "^2.1.2"
+    },
+    "engines": {
+        "node": ">=10.x"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}

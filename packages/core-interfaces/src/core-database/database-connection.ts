@@ -1,41 +1,30 @@
+import { Interfaces } from "@arkecosystem/crypto";
 import { IBlocksRepository } from "./database-repository";
 import { IRoundsRepository } from "./database-repository";
 import { ITransactionsRepository } from "./database-repository";
 import { IWalletsRepository } from "./database-repository";
 
-import { models } from "@arkecosystem/crypto";
+export interface IConnection {
+    options: Record<string, any>;
 
-export interface IDatabaseConnection {
-
-    options: any;
-
-    blocksRepository : IBlocksRepository;
+    blocksRepository: IBlocksRepository;
     walletsRepository: IWalletsRepository;
     roundsRepository: IRoundsRepository;
     transactionsRepository: ITransactionsRepository;
 
-    make(): Promise<IDatabaseConnection>;
+    make(): Promise<IConnection>;
 
     connect(): Promise<void>;
 
     disconnect(): Promise<void>;
 
-    buildWallets(height: number) : Promise<boolean>;
+    buildWallets(): Promise<void>;
 
-    /* We have these methods on the connection since they rely on transactions, which is a DB specific detail
-       Keep DB specifics away from the service layer
-     */
-    saveWallets(wallets: any[], force?: boolean) : Promise<void>;
+    saveBlock(block: Interfaces.IBlock): Promise<void>;
 
-    saveBlock(block: models.Block): Promise<any>;
+    saveBlocks(blocks: Interfaces.IBlock[]): Promise<void>;
 
-    deleteBlock(block: models.Block): Promise<any>;
+    resetAll(): Promise<void>;
 
-    enqueueDeleteBlock(block: models.Block);
-
-    enqueueDeleteRound(height: number);
-
-    enqueueSaveBlock(block: models.Block);
-
-    commitQueuedQueries();
+    deleteBlocks(blocks: Interfaces.IBlockData[]): Promise<void>;
 }

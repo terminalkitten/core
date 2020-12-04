@@ -1,47 +1,32 @@
 import { app } from "@arkecosystem/core-container";
-import { migrations, plugin, PostgresConnection } from "@arkecosystem/core-database-postgres";
-import { Logger } from "@arkecosystem/core-interfaces";
-import promise from "bluebird";
+import { PostgresConnection } from "@arkecosystem/core-database-postgres";
+import { Logger, Shared } from "@arkecosystem/core-interfaces";
 
+import { roundCalculator } from "@arkecosystem/core-utils";
 import { queries } from "./queries";
 import { rawQuery } from "./utils";
-import { columns } from "./utils/column-set";
 
 const logger = app.resolvePlugin<Logger.ILogger>("logger");
 
-class Database {
+export class Database {
     public db: any;
     public pgp: any;
-    public isSharedConnection: boolean;
     public blocksColumnSet: any;
     public transactionsColumnSet: any;
+    public roundsColumnSet: any;
 
-    public async make(connection : PostgresConnection) {
-        if (connection) {
-            this.db = connection.db;
-            this.pgp = (connection as any).pgp;
-            this.__createColumnSets();
-            this.isSharedConnection = true;
-            logger.info("Snapshots: reusing core-database-postgres connection from running core");
-            return this;
-        }
+    public async make(connection: PostgresConnection) {
+        this.db = connection.db;
+        this.pgp = (connection as any).pgp;
+        this.createColumnSets();
 
-        try {
-            const pgp = require("pg-promise")({ promiseLib: promise });
-            this.pgp = pgp;
+        return this;
+    }
 
-            const options: any = plugin.defaults.connection;
-            options.idleTimeoutMillis = 100;
-
-            this.db = pgp(options);
-            this.__createColumnSets();
-            await this.__runMigrations();
-            logger.info("Snapshots: Database connected");
-            this.isSharedConnection = false;
-            return this;
-        } catch (error) {
-            app.forceExit("Error while connecting to postgres", error);
-            return null;
+    public close() {
+        if (!app.has("blockchain")) {
+            this.db.$pool.end();
+            this.pgp.end();
         }
     }
 
@@ -49,42 +34,45 @@ class Database {
         return this.db.oneOrNone(queries.blocks.latest);
     }
 
+    /**
+     * Get the highest row from the rounds table.
+     * @return Object latest row
+     * @return null if the table is empty.
+     */
+    public async getLastRound(): Promise<{ public_key: string; balance: string; round: string } | null> {
+        return this.db.oneOrNone(queries.rounds.latest);
+    }
+
     public async getBlockByHeight(height) {
         return this.db.oneOrNone(queries.blocks.findByHeight, { height });
     }
 
-    public async truncateChain() {
-        const tables = ["wallets", "rounds", "transactions", "blocks"];
-        logger.info("Truncating tables: wallets, rounds, transactions, blocks");
+    public async truncate() {
         try {
-            for (const table of tables) {
-                await this.db.none(queries.truncate(table));
-            }
+            const tables: string = "rounds, transactions, blocks";
 
-            return this.getLastBlock();
+            logger.info(`Truncating tables: ${tables}`);
+
+            await this.db.none(queries.truncate(tables));
         } catch (error) {
-            app.forceExit("Truncate chain error", error);
+            app.forceExit(error.message);
         }
     }
 
-    public async rollbackChain(height) {
-        const config = app.getConfig();
-        const maxDelegates = config.getMilestone(height).activeDelegates;
-        const currentRound = Math.floor(height / maxDelegates);
-        const lastBlockHeight = currentRound * maxDelegates;
-        const lastRemainingBlock = await this.getBlockByHeight(lastBlockHeight);
+    public async rollbackChain(roundInfo: Shared.IRoundInfo) {
+        const { round, roundHeight } = roundInfo;
+        const lastRemainingBlock = await this.getBlockByHeight(roundHeight);
 
         try {
             if (lastRemainingBlock) {
                 await Promise.all([
-                    this.db.none(queries.truncate("wallets")),
                     this.db.none(queries.transactions.deleteFromTimestamp, {
                         timestamp: lastRemainingBlock.timestamp,
                     }),
                     this.db.none(queries.blocks.deleteFromHeight, {
                         height: lastRemainingBlock.height,
                     }),
-                    this.db.none(queries.rounds.deleteFromRound, { round: currentRound }),
+                    this.db.none(queries.rounds.deleteFromRound, { round }),
                 ]);
             }
         } catch (error) {
@@ -94,15 +82,41 @@ class Database {
         return this.getLastBlock();
     }
 
-    public async getExportQueries(startHeight, endHeight) {
-        const startBlock = await this.getBlockByHeight(startHeight);
-        const endBlock = await this.getBlockByHeight(endHeight);
+    public async getExportQueries(meta: {
+        startHeight: number;
+        endHeight: number;
+        skipCompression: boolean;
+        folder: string;
+    }) {
+        const startBlock = await this.getBlockByHeight(meta.startHeight);
+        const endBlock = await this.getBlockByHeight(meta.endHeight);
 
         if (!startBlock || !endBlock) {
             app.forceExit(
                 "Wrong input height parameters for building export queries. Blocks at height not found in db.",
             );
         }
+
+        let startRound: number;
+
+        if (meta.startHeight <= 1) {
+            startRound = 1;
+        } else {
+            const roundInfoPrev: Shared.IRoundInfo = roundCalculator.calculateRound(meta.startHeight - 1);
+            const roundInfoStart: Shared.IRoundInfo = roundCalculator.calculateRound(meta.startHeight);
+
+            if (roundInfoPrev.round === roundInfoStart.round) {
+                // The lower snapshot contains this round, so skip it from this snapshot.
+                // For example: a snapshot of blocks 1-80 contains full rounds 1 and 2, so
+                // when we create a snapshot 81-... we must skip round 2 and start from 3.
+                startRound = roundInfoStart.round + 1;
+            } else {
+                startRound = roundInfoStart.round;
+            }
+        }
+
+        const roundInfoEnd: Shared.IRoundInfo = roundCalculator.calculateRound(meta.endHeight);
+
         return {
             blocks: rawQuery(this.pgp, queries.blocks.heightRange, {
                 start: startBlock.height,
@@ -111,6 +125,10 @@ class Database {
             transactions: rawQuery(this.pgp, queries.transactions.timestampRange, {
                 start: startBlock.timestamp,
                 end: endBlock.timestamp,
+            }),
+            rounds: rawQuery(this.pgp, queries.rounds.roundRange, {
+                startRound,
+                endRound: roundInfoEnd.round,
             }),
         };
     }
@@ -127,30 +145,57 @@ class Database {
                 return this.blocksColumnSet;
             case "transactions":
                 return this.transactionsColumnSet;
+            case "rounds":
+                return this.roundsColumnSet;
             default:
                 throw new Error("Invalid table name");
         }
     }
 
-    public close() {
-        if (!this.isSharedConnection) {
-            logger.debug("Closing snapshots-cli database connection");
-            this.db.$pool.end();
-            this.pgp.end();
-        }
-    }
+    private createColumnSets() {
+        this.blocksColumnSet = new this.pgp.helpers.ColumnSet(
+            [
+                "id",
+                "version",
+                "timestamp",
+                "previous_block",
+                "height",
+                "number_of_transactions",
+                "total_amount",
+                "total_fee",
+                "reward",
+                "payload_length",
+                "payload_hash",
+                "generator_public_key",
+                "block_signature",
+            ],
+            {
+                table: "blocks",
+            },
+        );
 
-    public __createColumnSets() {
-        this.blocksColumnSet = new this.pgp.helpers.ColumnSet(columns.blocks, {
-            table: "blocks",
-        });
-        this.transactionsColumnSet = new this.pgp.helpers.ColumnSet(columns.transactions, { table: "transactions" });
-    }
+        this.transactionsColumnSet = new this.pgp.helpers.ColumnSet(
+            [
+                "id",
+                "version",
+                "nonce",
+                "block_id",
+                "sequence",
+                "timestamp",
+                "sender_public_key",
+                "recipient_id",
+                "type",
+                "type_group",
+                "vendor_field",
+                "amount",
+                "fee",
+                "serialized",
+                "asset",
+            ],
+            { table: "transactions" },
+        );
 
-    public async __runMigrations() {
-        for (const migration of migrations) {
-            await this.db.none(migration);
-        }
+        this.roundsColumnSet = new this.pgp.helpers.ColumnSet(["round", "balance", "public_key"], { table: "rounds" });
     }
 }
 

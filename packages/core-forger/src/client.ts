@@ -1,184 +1,152 @@
 import { app } from "@arkecosystem/core-container";
-import { Logger } from "@arkecosystem/core-interfaces";
-import { NetworkState, NetworkStateStatus } from "@arkecosystem/core-p2p";
-import axios from "axios";
+import { Logger, P2P } from "@arkecosystem/core-interfaces";
+import { codec, NetworkState, NetworkStateStatus, socketEmit } from "@arkecosystem/core-p2p";
+import { Blocks, Interfaces } from "@arkecosystem/crypto";
 import delay from "delay";
-import sample from "lodash/sample";
-import { URL } from "url";
+import socketCluster from "socketcluster-client";
+import { HostNoResponseError, RelayCommunicationError } from "./errors";
+import { IRelayHost } from "./interfaces";
 
 export class Client {
-    public hosts: string[];
-    private host: any;
-    private headers: any;
-    private logger: Logger.ILogger;
+    public hosts: IRelayHost[];
+    private readonly logger: Logger.ILogger = app.resolvePlugin<Logger.ILogger>("logger");
+    private host: IRelayHost;
 
-    /**
-     * Create a new client instance.
-     * @param  {(Array|String)} hosts - Host or Array of hosts
-     */
-    constructor(hosts) {
-        this.hosts = Array.isArray(hosts) ? hosts : [hosts];
-        this.logger = app.resolvePlugin<Logger.ILogger>("logger");
+    constructor(hosts: IRelayHost[]) {
+        this.hosts = hosts.map(host => {
+            host.socket = socketCluster.create({
+                ...host,
+                autoReconnectOptions: {
+                    initialDelay: 1000,
+                    maxDelay: 1000,
+                },
+                codecEngine: codec,
+            });
 
-        const { port } = new URL(this.hosts[0]);
+            host.socket.on("error", err => {
+                if (err.message !== "Socket hung up") {
+                    this.logger.error(err.message);
+                }
+            });
 
-        if (!port) {
-            throw new Error("Failed to determine the P2P communcation port.");
-        }
+            return host;
+        });
 
-        this.headers = {
-            version: app.getVersion(),
-            port,
-            nethash: app.getConfig().get("network.nethash"),
-            "x-auth": "forger",
-            "Content-Type": "application/json",
-        };
+        this.host = this.hosts[0];
     }
 
-    /**
-     * Send the given block to the relay.
-     * @param  {(Block|Object)} block
-     * @return {Object}
-     */
-    public async broadcast(block) {
+    public async broadcastBlock(block: Interfaces.IBlock): Promise<void> {
         this.logger.debug(
-            `Broadcasting forged block id:${block.id} at height:${block.height.toLocaleString()} with ${
-                block.numberOfTransactions
-            } transactions to ${this.host} :package:`,
+            `Broadcasting block ${block.data.height.toLocaleString()} (${block.data.id}) with ${
+                block.data.numberOfTransactions
+            } transactions to ${this.host.hostname}`,
         );
 
-        return this.__post(`${this.host}/internal/blocks`, { block });
+        try {
+            await this.emit("p2p.peer.postBlock", {
+                block: Blocks.Block.serializeWithTransactions({
+                    ...block.data,
+                    transactions: block.transactions.map(tx => tx.data),
+                }),
+            });
+        } catch (error) {
+            this.logger.error(`Broadcast block failed: ${error.message}`);
+        }
     }
 
-    /**
-     * Sends the WAKEUP signal to the to relay hosts to check if synced and sync if necesarry
-     */
-    public async syncCheck() {
-        await this.__chooseHost();
+    public async syncWithNetwork(): Promise<void> {
+        await this.selectHost();
 
-        this.logger.debug(`Sending wake-up check to relay node ${this.host}`);
+        this.logger.debug(`Sending wake-up check to relay node ${this.host.hostname}`);
 
         try {
-            await this.__get(`${this.host}/internal/blockchain/sync`);
+            await this.emit("p2p.internal.syncBlockchain");
         } catch (error) {
             this.logger.error(`Could not sync check: ${error.message}`);
         }
     }
 
-    /**
-     * Get the current round.
-     * @return {Object}
-     */
-    public async getRound() {
-        try {
-            await this.__chooseHost();
+    public async getRound(): Promise<P2P.ICurrentRound> {
+        await this.selectHost();
 
-            const response = await this.__get(`${this.host}/internal/rounds/current`);
-
-            return response.data.data;
-        } catch (e) {
-            return {};
-        }
+        return this.emit<P2P.ICurrentRound>("p2p.internal.getCurrentRound");
     }
 
-    /**
-     * Get the current network quorum.
-     * @return {NetworkState}
-     */
-    public async getNetworkState(): Promise<NetworkState> {
+    public async getNetworkState(): Promise<P2P.INetworkState> {
         try {
-            const response = await this.__get(`${this.host}/internal/network/state`);
-            const { data } = response.data;
-
-            return NetworkState.parse(data);
-        } catch (e) {
+            return NetworkState.parse(await this.emit<P2P.INetworkState>("p2p.internal.getNetworkState", {}, 4000));
+        } catch (err) {
             return new NetworkState(NetworkStateStatus.Unknown);
         }
     }
 
-    /**
-     * Get all transactions that are ready to be forged.
-     * @return {Object}
-     */
-    public async getTransactions() {
-        try {
-            const response = await this.__get(`${this.host}/internal/transactions/forging`);
-
-            return response.data.data;
-        } catch (e) {
-            return {};
-        }
+    public async getTransactions(): Promise<P2P.IForgingTransactions> {
+        return this.emit<P2P.IForgingTransactions>("p2p.internal.getUnconfirmedTransactions");
     }
 
-    /**
-     * Get a list of all active delegate usernames.
-     * @return {Object}
-     */
-    public async getUsernames(wait = 0) {
-        await this.__chooseHost(wait);
-
-        try {
-            const response = await this.__get(`${this.host}/internal/utils/usernames`);
-
-            return response.data.data;
-        } catch (e) {
-            return {};
-        }
-    }
-
-    /**
-     * Emit the given event and payload to the local host.
-     * @param  {String} event
-     * @param  {Object} body
-     * @return {Object}
-     */
-    public async emitEvent(event, body) {
+    public async emitEvent(
+        event: string,
+        body: { error: string } | { activeDelegates: string[] } | Interfaces.IBlockData | Interfaces.ITransactionData,
+    ): Promise<void> {
         // NOTE: Events need to be emitted to the localhost. If you need to trigger
         // actions on a remote host based on events you should be using webhooks
         // that get triggered by the events you wish to react to.
 
-        const allowedHosts = ["localhost", "127.0.0.1", "::ffff:127.0.0.1", "192.168.*"];
+        const allowedHosts: string[] = ["127.0.0.1", "::ffff:127.0.0.1"];
 
-        const host = this.hosts.find(item => allowedHosts.some(allowedHost => item.includes(allowedHost)));
+        const host: IRelayHost = this.hosts.find(item =>
+            allowedHosts.some(allowedHost => item.hostname.includes(allowedHost)),
+        );
 
         if (!host) {
-            return this.logger.error("Was unable to find any local hosts.");
+            this.logger.error("emitEvent: unable to find any local hosts.");
+            return;
         }
 
         try {
-            await this.__post(`${host}/internal/utils/events`, { event, body });
+            await this.emit("p2p.internal.emitEvent", { event, body });
         } catch (error) {
-            this.logger.error(`Failed to emit "${event}" to "${host}"`);
+            this.logger.error(`Failed to emit "${event}" to "${host.hostname}:${host.port}"`);
         }
     }
 
-    /**
-     * Chose a responsive host.
-     * @return {void}
-     */
-    public async __chooseHost(wait = 0) {
-        const host = sample(this.hosts);
-
-        try {
-            await this.__get(`${host}/peer/status`);
-
-            this.host = host;
-        } catch (error) {
-            this.logger.debug(`${host} didn't respond to the forger. Trying another host :sparkler:`);
-
-            if (wait > 0) {
-                await delay(wait);
+    public async selectHost(): Promise<void> {
+        for (let i = 0; i < 10; i++) {
+            for (const host of this.hosts) {
+                if (host.socket.getState() === host.socket.OPEN) {
+                    this.host = host;
+                    return;
+                }
             }
 
-            await this.__chooseHost(wait);
+            await delay(100);
         }
+
+        this.logger.debug(
+            `No open socket connection to any host: ${JSON.stringify(
+                this.hosts.map(host => `${host.hostname}:${host.port}`),
+            )}.`,
+        );
+
+        throw new HostNoResponseError(this.hosts.map(host => host.hostname).join());
     }
 
-    public async __get(url) {
-        return axios.get(url, { headers: this.headers, timeout: 2000 });
-    }
+    private async emit<T = object>(event: string, data: Record<string, any> = {}, timeout: number = 4000): Promise<T> {
+        try {
+            const response: P2P.IResponse<T> = await socketEmit(
+                this.host.hostname,
+                this.host.socket,
+                event,
+                data,
+                {
+                    "Content-Type": "application/json",
+                },
+                timeout,
+            );
 
-    public async __post(url, body) {
-        return axios.post(url, body, { headers: this.headers, timeout: 2000 });
+            return response.data;
+        } catch (error) {
+            throw new RelayCommunicationError(`${this.host.hostname}:${this.host.port}<${event}>`, error.message);
+        }
     }
 }

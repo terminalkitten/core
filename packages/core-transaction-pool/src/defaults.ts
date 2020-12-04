@@ -6,12 +6,14 @@ export const defaults = {
     // only accepted if its fee is higher than the transaction with the lowest
     // fee in the pool. In this case the transaction with the lowest fee is removed
     // from the pool in order to accommodate the new one.
-    maxTransactionsInPool: process.env.CORE_MAX_TRANSACTIONS_IN_POOL || 100000,
-    maxTransactionsPerSender: process.env.CORE_TRANSACTION_POOL_MAX_PER_SENDER || 300,
+    maxTransactionsInPool: process.env.CORE_MAX_TRANSACTIONS_IN_POOL || 15000,
+    maxTransactionsPerSender: process.env.CORE_TRANSACTION_POOL_MAX_PER_SENDER || 150,
     allowedSenders: [],
     maxTransactionsPerRequest: process.env.CORE_TRANSACTION_POOL_MAX_PER_REQUEST || 40,
-    maxTransactionBytes: process.env.CORE_TRANSACTION_POOL_MAX_TRANSACTIONS_SIZE || 1047876,
-    maxTransactionAge: 21600,
+    // Max transaction age in number of blocks produced since the transaction was created.
+    // If a transaction stays that long in the pool without being included in any block,
+    // then it will be removed.
+    maxTransactionAge: 2700,
     dynamicFees: {
         enabled: true,
         minFeePool: 3000,
@@ -23,9 +25,11 @@ export const defaults = {
             vote: 100,
             multiSignature: 500,
             ipfs: 250,
-            timelockTransfer: 500,
             multiPayment: 500,
-            delegateResignation: 400000,
+            delegateResignation: 100,
+            htlcLock: 100,
+            htlcClaim: 0,
+            htlcRefund: 0,
         },
     },
 };

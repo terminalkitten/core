@@ -1,78 +1,43 @@
-import { models } from "@arkecosystem/crypto";
+import { Dayjs } from "dayjs";
+import { IPeerVerificationResult } from "./peer-verifier";
+
+export interface IPeerPorts {
+    [name: string]: number;
+}
+
+export interface IPeerPlugins {
+    [name: string]: { enabled: boolean; port: number };
+}
 
 export interface IPeer {
-    setHeaders(headers: any): void;
+    readonly url: string;
+    readonly port: number;
 
-    /**
-     * Set the given status for the peer.
-     * @param  {String} value
-     * @return {void}
-     */
-    setStatus(value: any): void;
+    readonly ip: string;
+    readonly ports: IPeerPorts;
 
-    /**
-     * Get information to broadcast.
-     * @return {Object}
-     */
-    toBroadcastInfo(): {
-        ip: any;
-        port: number;
-        nethash: any;
-        milestoneHash: string;
-        version: any;
-        os: any;
-        status: any;
-        height: any;
-        delay: any;
-    };
+    version: string;
 
-    /**
-     * Perform POST request for a block.
-     * @param  {Block}              block
-     * @return {(Object|undefined)}
-     */
-    postBlock(block: models.Block): Promise<any>;
+    latency: number;
+    state: IPeerState;
+    plugins: IPeerPlugins;
+    lastPinged: Dayjs | undefined;
+    verificationResult: IPeerVerificationResult | undefined;
 
-    /**
-     * Perform POST request for a transactions.
-     * @param  {Transaction[]}      transactions
-     * @return {(Object|undefined)}
-     */
-    postTransactions(transactions: models.Transaction[]): Promise<any>;
-
-    /**
-     * Download blocks from peer.
-     * @param  {Number} fromBlockHeight
-     * @return {(Object[]|undefined)}
-     */
-    downloadBlocks(fromBlockHeight: number): Promise<any>;
-
-    /**
-     * Perform ping request on this peer if it has not been
-     * recently pinged.
-     * @param  {Number} [delay=5000]
-     * @param  {Boolean} force
-     * @return {Object}
-     * @throws {Error} If fail to get peer status.
-     */
-    ping(delay: any, force?: boolean): Promise<any>;
-
-    /**
-     * Returns true if this peer was pinged the past 2 minutes.
-     * @return {Boolean}
-     */
+    isVerified(): boolean;
+    isForked(): boolean;
     recentlyPinged(): boolean;
 
-    /**
-     * Refresh peer list. It removes blacklisted peers from the fetch
-     * @return {Object[]}
-     */
-    getPeers(): Promise<any>;
+    toBroadcast(): IPeerBroadcast;
+}
 
-    /**
-     * Check if peer has common blocks.
-     * @param  {[]String} ids
-     * @return {Boolean}
-     */
-    hasCommonBlocks(ids: string[]): Promise<any>;
+export interface IPeerBroadcast {
+    ip: string;
+}
+
+export interface IPeerState {
+    height: number;
+    forgingAllowed: boolean;
+    currentSlot: number;
+    header: Record<string, any>; // @TODO: rename, those are block headers but the name is horrible
 }

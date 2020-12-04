@@ -1,29 +1,42 @@
 import { Resolver } from "awilix";
 
-export interface PluginDescriptor {
+export interface IPluginDescriptor {
     alias: string;
     pkg: any;
+    required?: boolean;
     defaults?: any;
     extends?: string;
-    register(container: IContainer, options?: any): Promise<any>;
+    depends?: string;
+    register(container: IContainer, options?: IPluginOptions): Promise<any>;
     deregister?(container: IContainer, options?: any): Promise<void>;
 }
 
-export interface PluginConfig<T> {
+type PluginOptionValue = string | number | boolean | object;
+
+export interface IPluginOptions {
+    [key: string]: PluginOptionValue | PluginOptionValue[];
+}
+
+export interface IPluginConfig<T> {
     name: string;
     version: string;
-    options: { [key: string]: any };
+    options: IPluginOptions;
     plugin: T;
 }
 
 export interface IContainer {
+    config: any;
+
     silentShutdown: boolean;
+
+    shuttingDown: boolean;
 
     isReady: boolean;
 
     setUp(version: string, variables: any, options?: any): Promise<void>;
 
     getConfig(): any;
+
     /**
      * Tear down the app.
      * @return {Promise}
@@ -41,7 +54,7 @@ export interface IContainer {
      * @return {Object}
      * @throws {Error}
      */
-    resolve<T = any>(key: any): T;
+    resolve<T = any>(key: string): T;
 
     /**
      * Resolve a plugin.
@@ -49,7 +62,7 @@ export interface IContainer {
      * @return {Object}
      * @throws {Error}
      */
-    resolvePlugin<T = any>(key: any): T;
+    resolvePlugin<T = any>(key: string): T;
 
     /**
      * Resolve the options of a plugin. Available before a plugin mounts.
@@ -57,14 +70,14 @@ export interface IContainer {
      * @return {Object}
      * @throws {Error}
      */
-    resolveOptions(key: any): any;
+    resolveOptions(key: string): any;
 
     /**
      * Determine if the given registration exists.
      * @param  {String}  key
      * @return {Boolean}
      */
-    has(key: any): boolean;
+    has(key: string): boolean;
 
     /**
      * Force the container to exit and print the given message and associated error.
@@ -75,12 +88,6 @@ export interface IContainer {
      * Exit the container with the given exitCode, message and associated error.
      */
     exit(exitCode: number, message: string, error?: Error): void;
-
-    /**
-     * Get the application git commit hash.
-     * @throws {String}
-     */
-    getHashid(): string;
 
     /**
      * Get the application version.
@@ -94,4 +101,6 @@ export interface IContainer {
      * @return {void}
      */
     setVersion(version: any): void;
+
+    getName(): string;
 }

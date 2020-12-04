@@ -1,48 +1,33 @@
 import { app } from "@arkecosystem/core-container";
-import { Blockchain } from "@arkecosystem/core-interfaces";
-import { Bignum } from "@arkecosystem/crypto";
+import { Blockchain, State } from "@arkecosystem/core-interfaces";
+import { Utils } from "@arkecosystem/crypto";
+import { supplyCalculator } from "./index";
 
-const BignumMod = Bignum.clone({ DECIMAL_PLACES: 2 });
+const toDecimal = (voteBalance: Utils.BigNumber, totalSupply: Utils.BigNumber): number => {
+    const decimals: number = 2;
+    const exponent: number = totalSupply.toString().length - voteBalance.toString().length + 4;
 
-/**
- * Calculate the approval for the given delegate.
- * @param  {Delegate} delegate
- * @param  {Number} height
- * @return {Number} Approval, with 2 decimals
- */
-function calculateApproval(delegate, height: any = null) {
-    const config = app.getConfig();
+    // @ts-ignore
+    const div = voteBalance.times(Math.pow(10, exponent)).dividedBy(totalSupply) / Math.pow(10, exponent - decimals);
 
+    return +Number(div).toFixed(2);
+};
+
+export const calculateApproval = (delegate: State.IWallet, height?: number): number => {
     if (!height) {
         height = app.resolvePlugin<Blockchain.IBlockchain>("blockchain").getLastBlock().data.height;
     }
 
-    const constants = config.getMilestone(height);
-    const totalSupply = new BignumMod(config.get("genesisBlock.totalAmount")).plus(
-        (height - constants.height) * constants.reward,
-    );
-    const voteBalance = new BignumMod(delegate.voteBalance);
+    const totalSupply = Utils.BigNumber.make(supplyCalculator.calculate(height));
+    const voteBalance = Utils.BigNumber.make(delegate.getAttribute<Utils.BigNumber>("delegate.voteBalance"));
 
-    return +voteBalance
-        .times(100)
-        .dividedBy(totalSupply)
-        .toFixed(2);
-}
+    return toDecimal(voteBalance, totalSupply);
+};
 
-/**
- * Calculate the productivity of the given delegate.
- * @param  {Delegate} delegate
- * @return {Number} Productivity, with 2 decimals
- */
-function calculateProductivity(delegate) {
-    const missedBlocks = +delegate.missedBlocks;
-    const producedBlocks = +delegate.producedBlocks;
+export const calculateForgedTotal = (wallet: State.IWallet): string => {
+    const delegate: State.IWalletDelegateAttributes = wallet.getAttribute("delegate");
+    const forgedFees: Utils.BigNumber = Utils.BigNumber.make(delegate.forgedFees || 0);
+    const forgedRewards: Utils.BigNumber = Utils.BigNumber.make(delegate.forgedRewards || 0);
 
-    if (!missedBlocks && !producedBlocks) {
-        return +(0).toFixed(2);
-    }
-
-    return +(100 - missedBlocks / ((producedBlocks + missedBlocks) / 100)).toFixed(2);
-}
-
-export { calculateApproval, calculateProductivity };
+    return forgedFees.plus(forgedRewards).toFixed();
+};

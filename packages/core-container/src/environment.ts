@@ -1,58 +1,45 @@
 import envPaths from "env-paths";
+import envfile from "envfile";
 import expandHomeDir from "expand-home-dir";
 import { ensureDirSync, existsSync } from "fs-extra";
 import { resolve } from "path";
 
 export class Environment {
-    /**
-     * Create a new environment instance.
-     * @param  {Object} variables
-     * @return {void}
-     */
-    constructor(readonly variables: any) {}
+    constructor(private readonly variables: Record<string, any>) {}
 
-    /**
-     * Set up the environment variables.
-     */
-    public setUp() {
+    public setUp(): void {
         this.exportPaths();
         this.exportVariables();
     }
 
-    /**
-     * Export all path variables for the core environment.
-     * @return {void}
-     */
-    private exportPaths() {
-        const allowedKeys = ["data", "config", "cache", "log", "temp"];
-
-        const createPathVariables = (values, namespace?) =>
-            allowedKeys.forEach(key => {
-                if (values[key]) {
-                    const name = `CORE_PATH_${key.toUpperCase()}`;
-                    let path = resolve(expandHomeDir(values[key]));
-
-                    if (namespace) {
-                        path += `/${this.variables.network}`;
-                    }
-
-                    process.env[name] = path;
-                    ensureDirSync(path);
-                }
-            });
-
-        createPathVariables(envPaths(this.variables.token, { suffix: "core" }), this.variables.network);
-
-        if (this.variables.data || this.variables.config) {
-            createPathVariables(this.variables);
+    public merge(variables: object): void {
+        for (const [key, value] of Object.entries(variables)) {
+            process.env[key] = value;
         }
     }
 
-    /**
-     * Export all additional variables for the core environment.
-     * @return {void}
-     */
-    private exportVariables() {
+    private exportPaths(): void {
+        const allowedKeys: string[] = ["data", "config", "cache", "log", "temp"];
+        const paths: envPaths.Paths = envPaths(this.variables.token, { suffix: "core" });
+
+        for (const key of allowedKeys) {
+            if (paths[key]) {
+                const name = `CORE_PATH_${key.toUpperCase()}`;
+                let path = resolve(expandHomeDir(paths[key]));
+
+                if (this.variables.network) {
+                    path += `/${this.variables.network}`;
+                }
+
+                if (process.env[name] === undefined) {
+                    process.env[name] = path;
+                    ensureDirSync(path);
+                }
+            }
+        }
+    }
+
+    private exportVariables(): void {
         process.env.CORE_TOKEN = this.variables.token;
 
         // Don't pollute the test environment!
@@ -60,14 +47,10 @@ export class Environment {
             return;
         }
 
-        const envPath = expandHomeDir(`${process.env.CORE_PATH_CONFIG}/.env`);
+        const envPath: string = expandHomeDir(`${process.env.CORE_PATH_CONFIG}/.env`);
 
         if (existsSync(envPath)) {
-            const env = require("envfile").parseFileSync(envPath);
-
-            Object.keys(env).forEach(key => {
-                process.env[key] = env[key];
-            });
+            this.merge(envfile.parseFileSync(envPath));
         }
     }
 }

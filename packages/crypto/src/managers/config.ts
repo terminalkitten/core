@@ -1,104 +1,67 @@
 import deepmerge from "deepmerge";
-import camelCase from "lodash/camelCase";
-import get from "lodash/get";
-import set from "lodash/set";
-import { feeManager } from "./fee";
-
-import { TransactionTypes } from "../constants";
+import get from "lodash.get";
+import set from "lodash.set";
+import { InvalidMilestoneConfigurationError } from "../errors";
+import { IMilestone } from "../interfaces";
+import { INetworkConfig } from "../interfaces/networks";
 import * as networks from "../networks";
-
-interface IMilestone {
-    index: number;
-    data: { [key: string]: any };
-}
-
-export type NetworkName = keyof typeof networks;
+import { NetworkName } from "../types";
 
 export class ConfigManager {
-    public config: any;
-    public milestone: IMilestone;
-    public milestones: any;
+    private config: INetworkConfig;
     private height: number;
+    private milestone: IMilestone;
+    private milestones: Record<string, any>;
 
-    /**
-     * @constructor
-     */
     constructor() {
         this.setConfig(networks.devnet);
     }
 
-    /**
-     * Set config data.
-     * @param {Object} config
-     */
-    public setConfig(config: any) {
-        this.config = {};
+    public setConfig(config: INetworkConfig): void {
+        this.config = {
+            network: config.network,
+            exceptions: config.exceptions,
+            milestones: config.milestones,
+            genesisBlock: config.genesisBlock,
+        };
 
-        // Map the config.network values to the root
-        for (const [key, value] of Object.entries(config.network)) {
-            this.config[key] = value;
-        }
-
-        this.config.exceptions = config.exceptions;
-        this.config.milestones = config.milestones;
-        this.config.genesisBlock = config.genesisBlock;
-
+        this.validateMilestones();
         this.buildConstants();
-        this.buildFees();
     }
 
-    /**
-     * Set the configuration based on a preset.
-     */
-    public setFromPreset(network: NetworkName) {
+    public setFromPreset(network: NetworkName): void {
         this.setConfig(this.getPreset(network));
     }
 
-    /**
-     * Get the configuration for a preset.
-     */
-    public getPreset(network: NetworkName) {
+    public getPreset(network: NetworkName): INetworkConfig {
         return networks[network.toLowerCase()];
     }
 
-    /**
-     * Get all config data.
-     */
-    public all() {
+    public all(): INetworkConfig {
         return this.config;
     }
 
-    /**
-     * Set individual config value.
-     */
-    public set(key: string, value: any) {
+    public set<T = any>(key: string, value: T): void {
         set(this.config, key, value);
     }
 
-    /**
-     * Get specific config value.
-     */
-    public get<T = any>(key): T {
-        return get(this.config, key) as T;
+    public get<T = any>(key: string): T {
+        return get(this.config, key);
     }
 
-    /**
-     * Set config manager height.
-     */
     public setHeight(value: number): void {
         this.height = value;
     }
 
-    /**
-     * Get config manager height.
-     */
     public getHeight(): number {
         return this.height;
     }
 
-    /**
-     * Get all config constants based on height.
-     */
+    public isNewMilestone(height?: number): boolean {
+        height = height || this.height;
+        return this.milestones.some(milestone => milestone.height === height);
+    }
+
     public getMilestone(height?: number): { [key: string]: any } {
         if (!height && this.height) {
             height = this.height;
@@ -124,9 +87,10 @@ export class ConfigManager {
         return this.milestone.data;
     }
 
-    /**
-     * Build constant data based on active heights.
-     */
+    public getMilestones(): any {
+        return this.milestones;
+    }
+
     private buildConstants(): void {
         this.milestones = this.config.milestones.sort((a, b) => a.height - b.height);
         this.milestone = {
@@ -136,18 +100,34 @@ export class ConfigManager {
 
         let lastMerged = 0;
 
+        const overwriteMerge = (dest, source, options) => source;
+
         while (lastMerged < this.milestones.length - 1) {
-            this.milestones[lastMerged + 1] = deepmerge(this.milestones[lastMerged], this.milestones[lastMerged + 1]);
+            this.milestones[lastMerged + 1] = deepmerge(this.milestones[lastMerged], this.milestones[lastMerged + 1], {
+                arrayMerge: overwriteMerge,
+            });
             lastMerged++;
         }
     }
 
-    /**
-     * Build fees from config constants.
-     */
-    private buildFees(): void {
-        for (const type of Object.keys(TransactionTypes)) {
-            feeManager.set(TransactionTypes[type], this.getMilestone().fees.staticFees[camelCase(type)]);
+    private validateMilestones(): void {
+        const delegateMilestones = this.config.milestones
+            .sort((a, b) => a.height - b.height)
+            .filter(milestone => milestone.activeDelegates);
+
+        for (let i = 1; i < delegateMilestones.length; i++) {
+            const previous = delegateMilestones[i - 1];
+            const current = delegateMilestones[i];
+
+            if (previous.activeDelegates === current.activeDelegates) {
+                continue;
+            }
+
+            if ((current.height - previous.height) % previous.activeDelegates !== 0) {
+                throw new InvalidMilestoneConfigurationError(
+                    `Bad milestone at height: ${current.height}. The number of delegates can only be changed at the beginning of a new round.`,
+                );
+            }
         }
     }
 }

@@ -1,57 +1,73 @@
 import { Logger } from "@arkecosystem/core-interfaces";
+import isEmpty from "lodash.isempty";
+import { inspect } from "util";
 
 export abstract class AbstractLogger implements Logger.ILogger {
-    /**
-     * Create a new logger instance.
-     * @param  {Object} options
-     */
-    constructor(protected options: any) {}
+    protected logger: any;
+    protected silentConsole: boolean = false;
+    protected readonly defaultLevels: Record<string, string> = {
+        error: "error",
+        warn: "warn",
+        info: "info",
+        debug: "debug",
+        verbose: "verbose",
+    };
 
-    /**
-     * Make the logger instance.
-     * @return {Object}
-     */
+    constructor(protected readonly options: Record<string, any>) {}
+
     public abstract make(): Logger.ILogger;
 
-    /**
-     * Log an error message.
-     * @param  {*} message
-     * @return {void}
-     */
-    public abstract error(message: any): void;
+    public getLogger<T = any>(): T {
+        return this.logger;
+    }
 
-    /**
-     * Log a warning message.
-     * @param  {*} message
-     * @return {void}
-     */
-    public abstract warn(message: any): void;
+    public log(level: string, message: any): boolean {
+        if (this.silentConsole) {
+            return false;
+        }
 
-    /**
-     * Log an info message.
-     * @param  {*} message
-     * @return {void}
-     */
-    public abstract info(message: any): void;
+        if (isEmpty(message)) {
+            return false;
+        }
 
-    /**
-     * Log a debug message.
-     * @param  {*} message
-     * @return {void}
-     */
-    public abstract debug(message: any): void;
+        if (typeof message !== "string") {
+            message = inspect(message, { depth: 1 });
+        }
 
-    /**
-     * Log a verbose message.
-     * @param  {*} message
-     * @return {void}
-     */
-    public abstract verbose(message: any): void;
+        this.logger[level](message);
 
-    /**
-     * Suppress console output.
-     * @param  {Boolean}
-     * @return {void}
-     */
-    public abstract suppressConsoleOutput(suppress: boolean): void;
+        return true;
+    }
+
+    public error(message: any): boolean {
+        return this.log(this.getLevel("error"), message);
+    }
+
+    public warn(message: any): boolean {
+        return this.log(this.getLevel("warn"), message);
+    }
+
+    public info(message: any): boolean {
+        return this.log(this.getLevel("info"), message);
+    }
+
+    public debug(message: any): boolean {
+        return this.log(this.getLevel("debug"), message);
+    }
+
+    public verbose(message: any): boolean {
+        return this.log(this.getLevel("verbose"), message);
+    }
+
+    public suppressConsoleOutput(suppress: boolean = true): void {
+        this.silentConsole = suppress;
+    }
+
+    protected getLevel(level: string): string {
+        return { ...this.defaultLevels, ...this.getLevels() }[level];
+    }
+
+    protected getLevels(): Record<string, string> {
+        return this.defaultLevels;
+    }
 }

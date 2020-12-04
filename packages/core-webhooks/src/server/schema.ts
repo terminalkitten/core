@@ -1,6 +1,6 @@
-import Joi from "joi";
+import Joi from "@hapi/joi";
 
-const conditions = [
+export const conditions: string[] = [
     "between",
     "contains",
     "eq",
@@ -15,62 +15,59 @@ const conditions = [
     "truthy",
 ];
 
-const index = {
-    query: {
-        page: Joi.number()
-            .integer()
-            .positive(),
-        limit: Joi.number()
-            .integer()
-            .positive(),
-    },
-};
-
-const show = {
+export const show: object = {
     params: {
-        id: Joi.string(),
+        id: Joi.string().required(),
     },
 };
 
-const store = {
+export const store: object = {
     payload: {
         event: Joi.string().required(),
         target: Joi.string()
-            .required()
-            .uri(),
+            .uri()
+            .required(),
         enabled: Joi.boolean().default(true),
-        conditions: Joi.array().items(
-            Joi.object({
-                key: Joi.string(),
-                value: Joi.any(),
-                condition: Joi.string().valid(conditions),
-            }),
-        ),
+        conditions: Joi.array()
+            .items(
+                Joi.object({
+                    key: Joi.string().required(),
+                    value: Joi.any(),
+                    condition: Joi.string()
+                        .valid(conditions)
+                        .required(),
+                }),
+            )
+            .required(),
     },
 };
 
-const update = {
+export const update: object = {
     params: {
-        id: Joi.string(),
+        id: Joi.string().required(),
     },
     payload: {
-        event: Joi.string(),
-        target: Joi.string().uri(),
-        enabled: Joi.boolean(),
-        conditions: Joi.array().items(
-            Joi.object({
-                key: Joi.string(),
-                value: Joi.any(),
-                condition: Joi.string().valid(conditions),
-            }),
-        ),
+        event: Joi.string().required(),
+        target: Joi.string()
+            .uri()
+            .required(),
+        enabled: Joi.boolean().required(),
+        conditions: Joi.array()
+            .items(
+                Joi.object({
+                    key: Joi.string().required(),
+                    value: Joi.any(),
+                    condition: Joi.string()
+                        .valid(conditions)
+                        .required(),
+                }),
+            )
+            .required(),
     },
 };
 
-const destroy = {
+export const destroy: object = {
     params: {
-        id: Joi.string(),
+        id: Joi.string().required(),
     },
 };
-
-export { index, show, store, update, destroy };

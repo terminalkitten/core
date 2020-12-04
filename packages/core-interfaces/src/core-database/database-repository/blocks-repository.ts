@@ -1,56 +1,38 @@
-import { Bignum } from "@arkecosystem/crypto";
+import { Interfaces, Utils } from "@arkecosystem/crypto";
+import { Database } from "../..";
+import { IBlocksPaginated } from "../business-repository";
+import { ISearchParameters } from "../search";
 import { IRepository } from "./repository";
 
 export interface IBlocksRepository extends IRepository {
+    findById(id: string): Promise<Interfaces.IBlockData>;
+    findByIds(id: string[]): Promise<Interfaces.IBlockData[]>;
 
-    /**
-     * Find a block by its ID.
-     */
-    findById(id: string): Promise<any>;
+    findByHeight(height: number): Promise<Interfaces.IBlockData>;
+    findByHeights(heights: number[]): Promise<Interfaces.IBlockData[]>;
 
-    /**
-     * Count the number of records in the database.
-     */
     count(): Promise<number>;
+    common(ids: string[]): Promise<Interfaces.IBlockData[]>;
+    heightRange(start: number, end: number): Promise<Interfaces.IBlockData[]>;
+    heightRangeWithTransactions(start: number, end: number): Promise<Database.IDownloadBlock[]>;
+    latest(): Promise<Interfaces.IBlockData>;
+    recent(count: number): Promise<Interfaces.IBlockData[]>;
 
-    /**
-     * Get all of the common blocks from the database.
-     */
-    common(ids: string[]): Promise<any[]>
-
-    /**
-     * Get all of the blocks within the given height range and order them by height.
-     */
-    heightRange(start: number, end: number): Promise<any[]>;
-
-    /**
-     * Get the last created block from the database.
-     */
-    latest(): Promise<any>;
-
-    /**
-     * Get the most recently created blocks ids from the database.
-     * @return {Promise}
-     */
-    recent(count: number): Promise<any[]>;
-
-    /**
-     * Get statistics about all blocks from the database.
-     */
     statistics(): Promise<{
-        numberOfTransactions: number,
-        totalFee: Bignum,
-        totalAmount: Bignum,
-        count: number
+        numberOfTransactions: number;
+        totalFee: Utils.BigNumber;
+        totalAmount: Utils.BigNumber;
+        count: number;
     }>;
 
-    /**
-     * Get top count blocks
-     */
-    top(count: number): Promise<any[]>;
+    top(count: number): Promise<Interfaces.IBlockData[]>;
+    delete(ids: string[], db: any): Promise<void>;
 
-    /**
-     * Delete the block from the database.
-     */
-    delete(id: string): Promise<void>;
+    getBlockRewards(): Promise<any>;
+
+    getLastForgedBlocks(): Promise<any>;
+
+    getDelegatesForgedBlocks(): Promise<any>;
+
+    search(params: ISearchParameters): Promise<IBlocksPaginated>;
 }
